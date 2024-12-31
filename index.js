@@ -1,6 +1,7 @@
 const originalBorders = new WeakMap(); // Stores original borders
 const modifiedElements = new Set(); // Tracks modified elements
 let bordersEnabled = false;
+let observer = null;
 
 function hasVisibleBorder(el) {
   const style = window.getComputedStyle(el);
@@ -11,9 +12,7 @@ function hasVisibleBorder(el) {
   );
 }
 
-function enableBorders({ respectExisting = false } = {}) {
-  if (bordersEnabled) return;
-
+function applyBorders({ respectExisting = false } = {}) {
   document.querySelectorAll("*").forEach((el, index) => {
     if (respectExisting && hasVisibleBorder(el)) return; // Skip elements with visible borders
     if (!originalBorders.has(el)) {
@@ -24,15 +23,44 @@ function enableBorders({ respectExisting = false } = {}) {
       ["red", "blue", "green", "yellow"][index % 4]
     }`; // Apply debug border
   });
+}
+
+function enableBorders({ respectExisting = false } = {}) {
+  if (bordersEnabled) return;
+
+  applyBorders({ respectExisting });
+
+  // Set up a MutationObserver to monitor DOM changes
+  observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === 1) {
+          // Apply borders to newly added elements
+          applyBorders({ respectExisting });
+        }
+      });
+    });
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 
   bordersEnabled = true;
-  console.log("Borders enabled.");
+  console.log("Borders enabled with dynamic updates.");
 }
 
 function disableBorders() {
   if (!bordersEnabled) return;
 
-  // Iterate over modified elements and restore their original borders
+  // Disconnect the MutationObserver
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+
+  // Restore original borders for modified elements
   modifiedElements.forEach((el) => {
     if (el.isConnected) {
       el.style.border = originalBorders.get(el) || ""; // Restore original border or clear
